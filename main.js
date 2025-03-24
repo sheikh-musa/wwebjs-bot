@@ -379,8 +379,8 @@ async function initWhatsAppClient() {
     
     // Function to create a ticket in osTicket
     async function createOsTicket(details) {
-      const osTicketUrl = process.env.OSTICKET_URL || 'http://66.96.212.114:6784/api/tickets.json';
-      const apiKey = process.env.OSTICKET_API_KEY || '8D1E1B0EFC2B9EEEEB5762145B4F5C20';
+      const osTicketUrl = process.env.OSTICKET_URL;
+      const apiKey = process.env.OSTICKET_API_KEY;
       
       const ticketData = {
         name: details.name,
