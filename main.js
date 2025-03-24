@@ -313,6 +313,7 @@ async function initWhatsAppClient() {
     
     // Handle incoming messages
     client.on('message', async (message) => {
+        console.log(message.body);
       try {
         const user = message.from;
         
