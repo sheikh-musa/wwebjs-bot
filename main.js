@@ -312,71 +312,84 @@ async function initWhatsAppClient() {
     });
     
     // Handle incoming messages
+    // Handle incoming messages
     client.on('message', async (message) => {
-        console.log(message.body);
-      try {
-        const user = message.from;
-        
-        // Greet user and present issue options
-        if (['hi', 'hello'].includes(message.body.toLowerCase())) {
-          const menu = 'Welcome to IT Support!\nPlease select your issue type by replying with the corresponding number:\n1. 🖥️ Hardware Issue\n2. 🌐 Network Issue\n3. 🛠️ Software Issue';
-          await client.sendMessage(user, menu);
-          userState[user] = { step: 'select_issue' };
-        }
-        // Process user's issue selection
-        else if (userState[user]?.step === 'select_issue') {
-          const issueTypes = {
-            '1': 'Hardware Issue',
-            '2': 'Network Issue',
-            '3': 'Software Issue'
-          };
-          const issueType = issueTypes[message.body.trim()];
-          if (issueType) {
-            userState[user] = { step: 'describe_issue', issueType };
-            await client.sendMessage(user, `You selected: ${issueType}\nPlease provide a brief description of your issue.`);
-          } else {
-            await client.sendMessage(user, 'Invalid selection. Please reply with 1, 2, or 3 to select your issue type.');
-          }
-        }
-        // Capture issue description
-        else if (userState[user]?.step === 'describe_issue') {
-          userState[user].description = message.body.trim();
-          userState[user].step = 'get_name';
-          await client.sendMessage(user, 'Thank you. Please provide your full name.');
-        }
-        // Capture user's full name
-        else if (userState[user]?.step === 'get_name') {
-          userState[user].name = message.body.trim();
-          userState[user].step = 'get_email';
-          await client.sendMessage(user, 'Please provide your email address.');
-        }
-        // Capture user's email and create ticket
-        else if (userState[user]?.step === 'get_email') {
-          userState[user].email = message.body.trim();
-          
-          // Validate email format
-          if (!validateEmail(userState[user].email)) {
-            await client.sendMessage(user, 'Invalid email format. Please provide a valid email address.');
-            return;
-          }
-          
-          // Create ticket in osTicket
-          const ticketDetails = userState[user];
-          try {
-            const ticketId = await createOsTicket(ticketDetails);
-            await client.sendMessage(user, `Your ticket has been created successfully! Your ticket ID is ${ticketId}.`);
-          } catch (error) {
-            console.error('Error creating ticket:', error);
-            await client.sendMessage(user, 'There was an error creating your ticket. Please try again later.');
-          }
-          
-          // Clear user state
-          delete userState[user];
-        }
-      } catch (error) {
-        console.error('Error handling message:', error);
+    try {
+      const user = message.from;
+      
+      // Greet user and present issue options
+      if (['hi', 'hello'].includes(message.body.toLowerCase())) {
+        const menu = 'Welcome to IT Support!\nPlease select your issue type by replying with the corresponding number:\n1. 🖥️ Hardware Issue\n2. 🌐 Network Issue\n3. 🛠️ Software Issue';
+        await client.sendMessage(user, menu);
+        userState[user] = { step: 'select_issue' };
       }
-    });
+      // Process user's issue selection
+      else if (userState[user]?.step === 'select_issue') {
+        const issueTypes = {
+          '1': 'Hardware Issue',
+          '2': 'Network Issue',
+          '3': 'Software Issue'
+        };
+        const issueType = issueTypes[message.body.trim()];
+        if (issueType) {
+          userState[user] = { step: 'describe_issue', issueType };
+          await client.sendMessage(user, `You selected: ${issueType}\nPlease provide a brief description of your issue.`);
+        } else {
+          await client.sendMessage(user, 'Invalid selection. Please reply with 1, 2, or 3 to select your issue type.');
+        }
+      }
+      // Capture issue description
+      else if (userState[user]?.step === 'describe_issue') {
+        userState[user].description = message.body.trim();
+        userState[user].step = 'get_name';
+        await client.sendMessage(user, 'Thank you. Please provide your full name.');
+      }
+      // Capture user's full name
+      else if (userState[user]?.step === 'get_name') {
+        userState[user].name = message.body.trim();
+        userState[user].step = 'get_email';
+        await client.sendMessage(user, 'Please provide your email address.');
+      }
+      // Capture user's email and create ticket
+      else if (userState[user]?.step === 'get_email') {
+        userState[user].email = message.body.trim();
+        
+        // Validate email format
+        if (!validateEmail(userState[user].email)) {
+          await client.sendMessage(user, 'Invalid email format. Please provide a valid email address.');
+          return;
+        }
+        
+        // Create ticket in osTicket
+        const ticketDetails = userState[user];
+        try {
+          const ticketId = await createOsTicket(ticketDetails);
+          
+          // Send a more detailed confirmation message
+          const confirmationMessage = `✅ Your support ticket has been created successfully!\n\n` +
+            `📝 Ticket ID: ${ticketId}\n` +
+            `🔍 Issue Type: ${ticketDetails.issueType}\n` +
+            `👤 Name: ${ticketDetails.name}\n\n` +
+            `Our support team will review your issue and get back to you shortly. ` +
+            `Please reference your Ticket ID in any future communications about this issue.`;
+          
+          await client.sendMessage(user, confirmationMessage);
+          console.log(`Ticket created for ${ticketDetails.name}, ID: ${ticketId}`);
+        } catch (error) {
+          console.error('Error creating ticket:', error);
+          await client.sendMessage(user, 'There was an error creating your ticket. Please try again later or contact support directly.');
+        }
+        
+        // Clear user state
+        delete userState[user];
+      } else {
+        // Handle unexpected messages
+        await client.sendMessage(user, 'To start a support conversation, please type "hi" or "hello".');
+      }
+    } catch (error) {
+      console.error('Error handling message:', error);
+    }
+  });
     
     // Function to create a ticket in osTicket
     async function createOsTicket(details) {
@@ -403,7 +416,9 @@ async function initWhatsAppClient() {
         const response = await axios.post(osTicketUrl, ticketData, config);
         
         if (response.status === 201) {
-          return response.data.ticket_id;
+            const ticketId = response.data;
+            console.log(`Successfully created ticket with ID: ${ticketId}`);
+            return ticketId;
         } else {
           throw new Error(`Failed to create ticket: ${response.statusText}`);
         }
