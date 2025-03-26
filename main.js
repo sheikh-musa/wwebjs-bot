@@ -209,10 +209,25 @@ app.get("/", (req, res) => {
   }
 });
 
-// Add a simple session cleanup endpoint
 app.get("/cleanup-session", async (req, res) => {
   try {
     console.log("Cleaning up session data...");
+
+    // First destroy the client if it exists
+    if (client) {
+      try {
+        console.log("Destroying client before cleanup...");
+        await client.destroy();
+        client = null;
+        console.log("Client destroyed");
+      } catch (err) {
+        console.error("Error destroying client:", err);
+      }
+    }
+
+    // Reset QR code
+    latestQR = null;
+    qrTimestamp = null;
 
     // Drop the collections if they exist
     if (mongoose.connection.readyState === 1) {
@@ -238,8 +253,12 @@ app.get("/cleanup-session", async (req, res) => {
       }
     }
 
-    // Reset QR code
-    latestQR = null;
+    // Wait a moment
+    await new Promise((resolve) => setTimeout(resolve, 3000));
+
+    // Restart the client
+    console.log("Restarting client after cleanup...");
+    await initWhatsAppClient();
 
     res.send('Session data cleaned. <a href="/">Go back</a> and refresh to get a new QR code.');
   } catch (error) {
@@ -248,48 +267,32 @@ app.get("/cleanup-session", async (req, res) => {
   }
 });
 
-// Add this endpoint to your Express app
-app.get("/debug", async (req, res) => {
+app.get("/debug", (req, res) => {
   try {
-    let status = {
-      client: "unknown",
-      authenticated: false,
-      info: null,
-      error: null,
+    const clientStatus = {
+      exists: client !== null,
+      initialized: client ? typeof client.initialize === "function" : false,
+      authenticated: client && client.authStrategy ? client.authStrategy.isAuthenticated() : false,
+      qrCode: latestQR ? "Available" : "Not available",
+      qrTimestamp: qrTimestamp ? new Date(qrTimestamp).toISOString() : "Never",
     };
 
-    if (!client) {
-      status.client = "not initialized";
-    } else {
-      status.client = "initialized";
-
-      try {
-        status.authenticated = client.authStrategy.isAuthenticated();
-      } catch (err) {
-        status.error = "Error checking authentication: " + err.message;
-      }
-
-      if (client.info) {
-        status.info = {
-          platform: client.info.platform,
-          connected: !!client.info.wid,
-        };
-      }
-    }
-
-    // Send response
     res.json({
-      status,
-      time: new Date().toISOString(),
-      memory: process.memoryUsage(),
+      client: clientStatus,
+      mongoConnected: mongoose.connection.readyState === 1,
       uptime: process.uptime(),
+      memory: process.memoryUsage(),
+      time: new Date().toISOString(),
     });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error("Error in debug endpoint:", error);
+    res.status(500).json({
+      error: error.message,
+      stack: error.stack,
+    });
   }
 });
 
-// Add a restart endpoint
 app.get("/restart-client", async (req, res) => {
   try {
     const result = await restartClient();
@@ -349,7 +352,7 @@ async function initWhatsAppClient() {
     console.log("Initializing WhatsApp client...");
 
     // Initialize WhatsApp client optimized for Railway environment
-    const client = new Client({
+    client = new Client({
       authStrategy: new RemoteAuth({
         store: store,
         backupSyncIntervalMs: 300000,
@@ -383,7 +386,7 @@ async function initWhatsAppClient() {
 
     // QR Code Handler - Generate QR code and make it available on the web server
     client.on("qr", async (qr) => {
-      console.log("New QR code received");
+      console.log("New QR code received at:", new Date().toISOString());
 
       // Update timestamp
       qrTimestamp = Date.now();
@@ -478,33 +481,35 @@ async function initWhatsAppClient() {
     // Initialize the client
     await client.initialize();
     console.log("Initialization process completed");
+    return client;
   } catch (error) {
     console.error("Fatal error encountered:", error);
     // Don't exit the process, keep the web server running
     console.error("WhatsApp client initialization failed, but web server is still running.");
-    console.error("Check the configuration and restart the application.");
+    return null;
   }
 }
 
-// Add this function to your code
 async function restartClient() {
   try {
     console.log("Attempting to restart WhatsApp client...");
 
     // If there's an existing client, try to close it properly
-    if (client && client.pupPage) {
+    if (client && typeof client.destroy === "function") {
       console.log("Destroying existing client...");
       await client.destroy();
       console.log("Existing client destroyed");
+    } else {
+      console.log("No valid client to destroy");
     }
 
     // Wait a moment before restarting
-    console.log("Waiting before restart...");
+    console.log("Waiting 5 seconds before restart...");
     await new Promise((resolve) => setTimeout(resolve, 5000));
 
-    // Initialize the client again
-    console.log("Re-initializing client...");
-    await client.initialize();
+    // Re-initialize
+    console.log("Starting new initialization...");
+    await initWhatsAppClient();
     console.log("Client re-initialized");
 
     return true;
