@@ -1,8 +1,9 @@
 // app.js - Express app configuration
-const express = require('express');
-const logger = require('./lib/logger');
-const uiRoutes = require('./routes/ui');
-const statusRoutes = require('./routes/status');
+const express = require("express");
+const logger = require("./lib/logger");
+const uiRoutes = require("./routes/ui");
+const statusRoutes = require("./routes/status");
+const { addCleanupRoute } = require("./utils/sessionCleanup");
 
 // Create Express app
 const app = express();
@@ -18,13 +19,15 @@ app.use((req, res, next) => {
 });
 
 // Configure routes
-app.use('/', uiRoutes);
-app.use('/api', statusRoutes);
+app.use("/", uiRoutes);
+app.use("/api", statusRoutes);
 
 // Error handler
 app.use((err, req, res, next) => {
-  logger.error('Express error:', err);
-  res.status(500).send('Internal Server Error');
+  logger.error("Express error:", err);
+  res.status(500).send("Internal Server Error");
 });
+
+addCleanupRoute(app);
 
 module.exports = app;

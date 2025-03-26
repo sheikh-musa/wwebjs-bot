@@ -10,6 +10,17 @@ const { startHealthCheck } = require('./lib/healthCheck');
 const { getPuppeteerOptions } = require('./config/puppeteer');
 const sessionManager = require('./lib/sessionManager');
 
+const fs = require('fs');
+const path = require('path');
+
+// Add this function to create necessary directories
+function ensureDirectoryExists(directory) {
+  if (!fs.existsSync(directory)) {
+    logger.info(`Creating directory: ${directory}`);
+    fs.mkdirSync(directory, { recursive: true });
+  }
+}
+
 // Global client reference
 let whatsappClient = null;
 
@@ -23,6 +34,11 @@ async function initWhatsAppClient() {
       logger.error('MongoDB not connected. Cannot initialize WhatsApp client.');
       return;
     }
+
+    // Create session directory
+    const sessionDir = path.resolve('./whatsapp-session');
+    ensureDirectoryExists(sessionDir);
+    logger.info(`Session directory: ${sessionDir}`);
 
     // Verify MongoDB collections
     await verifyMongoConnection();
@@ -42,7 +58,11 @@ async function initWhatsAppClient() {
       store: store,
       clientId: 'whatsapp-support-bot', // Consistent client ID
       backupSyncIntervalMs: 300000, // Sync session every 5 minutes (5 * 60 * 1000)
-      dataPath: './whatsapp-session', // Local session cache directory
+      dataPath: sessionDir,
+      // CRITICAL: Set tempPath to our valid directory
+      tempPath: sessionDir,
+      // Don't throw error if session ZIP isn't found
+      throwOnError: false,
       puppeteerOptions: {
         timeout: 120000, // Increase timeout for high-latency environments (2 minutes)
       },
@@ -57,35 +77,33 @@ async function initWhatsAppClient() {
       }
     });
     
-    // Initialize WhatsApp client
-    whatsappClient = new Client({
-      authStrategy: authStrategy,
-      puppeteer: getPuppeteerOptions(),
-      // Additional client options
-      webVersionCache: {
-        type: 'remote', 
-        remotePath: './webVersionCache'
-      },
-      restartOnAuthFail: true, // Auto-restart on auth failure
-      takeoverOnConflict: true, // Take over session if conflict
-      takeoverTimeoutMs: 10000, // Wait 10 seconds before takeover
-      userAgent: 'WhatsApp/2.2329.9 Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36', // Use a stable user agent
-      // Improved logging
-      logger: {
-        level: process.env.NODE_ENV === 'production' ? 'info' : 'debug',
-        stream: {
-          write: (message) => {
-            if (message.includes('ERR!') || message.includes('error')) {
-              logger.error(`WHATSAPP: ${message.trim()}`);
-            } else if (message.includes('session') || message.includes('auth')) {
-              logger.info(`WHATSAPP_AUTH: ${message.trim()}`);
-            } else {
-              logger.debug(`WHATSAPP: ${message.trim()}`);
-            }
+   // Initialize WhatsApp client with error handling
+   whatsappClient = new Client({
+    authStrategy: authStrategy,
+    puppeteer: getPuppeteerOptions(),
+    webVersionCache: {
+      type: 'local', // Changed to local for Railway environment
+      path: path.join(sessionDir, 'webCache')
+    },
+    restartOnAuthFail: true,
+    takeoverOnConflict: false, // Changed to false to prevent conflicts
+    takeoverTimeoutMs: 0, // Disable takeover
+    userAgent: 'WhatsApp/2.2329.9 Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36',
+    logger: {
+      level: process.env.NODE_ENV === 'production' ? 'info' : 'debug',
+      stream: {
+        write: (message) => {
+          if (message.includes('ERR!') || message.includes('error')) {
+            logger.error(`WHATSAPP: ${message.trim()}`);
+          } else if (message.includes('session') || message.includes('auth')) {
+            logger.info(`WHATSAPP_AUTH: ${message.trim()}`);
+          } else {
+            logger.debug(`WHATSAPP: ${message.trim()}`);
           }
         }
       }
-    });
+    }
+  });
     
     // Register event handlers
     registerEventHandlers(whatsappClient);
