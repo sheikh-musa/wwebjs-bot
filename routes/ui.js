@@ -1,16 +1,25 @@
 // routes/ui.js - Web UI routes
-const express = require('express');
+const express = require("express");
 const router = express.Router();
-const logger = require('../lib/logger');
-const qrHandler = require('../handlers/qrHandler');
+const logger = require("../lib/logger");
+const qrHandler = require("../handlers/qrHandler");
+
+// Global variables for tracking missing env vars
+// This needs to be set by the application during startup
+let missingEnvVars = [];
+
+// Function to set missing env vars from outside
+function setMissingEnvVars(vars) {
+  missingEnvVars = vars;
+  logger.info(`UI route updated with missing env vars: ${vars.join(", ")}`);
+}
 
 // Main route for QR code display
-router.get('/', (req, res) => {
+router.get("/", (req, res) => {
   // Get references to global variables
-  const { missingEnvVars } = require('../index');
   const latestQR = global.latestQR;
   const qrState = qrHandler.getQRState();
-  
+
   // If there are missing environment variables, show error
   if (missingEnvVars && missingEnvVars.length > 0) {
     return res.send(`
@@ -60,7 +69,7 @@ router.get('/', (req, res) => {
           <div class="error">
             <p>The following environment variables are missing:</p>
             <ul style="text-align: left;">
-              ${missingEnvVars.map(v => `<li><code>${v}</code></li>`).join('')}
+              ${missingEnvVars.map((v) => `<li><code>${v}</code></li>`).join("")}
             </ul>
           </div>
           <h2>How to Fix This</h2>
@@ -117,7 +126,7 @@ router.get('/', (req, res) => {
             margin-top: 10px;
           }
           .warning {
-            color: ${minutesAgo > 2 ? 'red' : '#666'};
+            color: ${minutesAgo > 2 ? "red" : "#666"};
             margin-top: 10px;
           }
         </style>
@@ -128,7 +137,7 @@ router.get('/', (req, res) => {
           <p>Scan this QR code with WhatsApp to authenticate your bot</p>
           <img src="${latestQR}" alt="WhatsApp QR Code">
           <p class="timestamp">Generated ${minutesAgo} minutes ago</p>
-          ${minutesAgo > 2 ? '<p class="warning">Warning: This QR code may have expired. Refresh the page to check for a new one.</p>' : ''}
+          ${minutesAgo > 2 ? '<p class="warning">Warning: This QR code may have expired. Refresh the page to check for a new one.</p>' : ""}
           <p><button onclick="window.location.reload()">Refresh</button></p>
         </div>
       </body>
@@ -192,4 +201,7 @@ router.get('/', (req, res) => {
   }
 });
 
-module.exports = router;
+module.exports = {
+  router,
+  setMissingEnvVars,
+};

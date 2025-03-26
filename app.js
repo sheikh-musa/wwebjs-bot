@@ -19,8 +19,11 @@ app.use((req, res, next) => {
 });
 
 // Configure routes
-app.use("/", uiRoutes);
+app.use("/", uiRoutes.router);
 app.use("/api", statusRoutes);
+
+// Add session cleanup route
+addCleanupRoute(app);
 
 // Error handler
 app.use((err, req, res, next) => {
@@ -28,6 +31,10 @@ app.use((err, req, res, next) => {
   res.status(500).send("Internal Server Error");
 });
 
-addCleanupRoute(app);
+// Export the UI routes setter for index.js to use
+const setMissingEnvVars = uiRoutes.setMissingEnvVars;
 
-module.exports = app;
+module.exports = {
+  app,
+  setMissingEnvVars,
+};

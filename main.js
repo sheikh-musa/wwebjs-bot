@@ -208,7 +208,7 @@
 // app.listen(port, () => {
 //   console.log(`QR code server running at http://localhost:${port}`);
 //   console.log(`When deployed on Railway, the URL will be available in your project dashboard`);
-  
+
 //   // Log environment variables status
 //   if (missingEnvVars.length > 0) {
 //     console.error('ERROR: Missing required environment variables:', missingEnvVars.join(', '));
@@ -225,30 +225,30 @@
 //   try {
 //     // Get MongoDB URL and log a redacted version for debugging
 //     const mongoUrl = process.env.MONGO_URL;
-    
+
 //     // Log a safe version of the MongoDB URL for debugging
 //     const redactedUrl = mongoUrl ? mongoUrl.replace(/:([^@/]+)@/, ':****@') : 'undefined';
 //     console.log('Using MongoDB URL:', redactedUrl);
-    
+
 //     // Additional mongoose connection options
 //     const mongooseOptions = {
 //       serverSelectionTimeoutMS: 15000, // Timeout after 15 seconds
 //       socketTimeoutMS: 45000, // Close sockets after 45 seconds of inactivity
 //     };
-    
+
 //     // Connect to MongoDB and wait for connection to be established
 //     console.log('Connecting to MongoDB...');
 //     await mongoose.connect(mongoUrl, mongooseOptions);
 //     console.log('Successfully connected to MongoDB');
-    
+
 //     // Initialize MongoStore with session name
 //     const store = new MongoStore({
 //       mongoose: mongoose,
 //       session: 'whatsapp-support-bot' // Consistent session name
 //     });
-    
+
 //     console.log('Initializing WhatsApp client...');
-    
+
 //     // Initialize WhatsApp client optimized for Railway environment
 //     const client = new Client({
 //       authStrategy: new RemoteAuth({
@@ -271,14 +271,14 @@
 //         ]
 //       }
 //     });
-    
+
 //     // QR Code Handler - Generate QR code and make it available on the web server
 //     client.on('qr', async (qr) => {
 //       console.log('New QR code received');
-      
+
 //       // Update timestamp
 //       qrTimestamp = Date.now();
-      
+
 //       // Generate QR code as data URL
 //       try {
 //         latestQR = await qrcode.toDataURL(qr);
@@ -287,41 +287,41 @@
 //         console.error('Error generating QR code:', err);
 //       }
 //     });
-    
+
 //     // Authentication Success Handler - Remove QR code when authenticated
 //     client.on('authenticated', () => {
 //       console.log('Authenticated successfully!');
 //       latestQR = null; // Clear QR code since it's no longer needed
 //     });
-    
+
 //     // Authentication Failed Handler
 //     client.on('auth_failure', (error) => {
 //       console.error('Authentication failed:', error);
 //     });
-    
+
 //     // Disconnected Handler
 //     client.on('disconnected', (reason) => {
 //       console.log('Client disconnected:', reason);
 //       // Clear QR code when disconnected, so a new one can be generated
 //       latestQR = null;
 //     });
-    
+
 //     // Ready Handler
 //     client.on('ready', () => {
 //       console.log('WhatsApp client ready!');
 //     });
-    
+
 //     // Handle incoming messages
 // client.on('message', async (message) => {
 //     try {
 //       const user = message.from;
 //       console.log(`Received message from ${user}: "${message.body}"`);
-      
+
 //       // Initialize user state if it doesn't exist
 //       if (!userState[user] && ['hi', 'hello'].includes(message.body.toLowerCase())) {
 //         userState[user] = { step: 'initial' };
 //       }
-      
+
 //       // Greet user and present issue options
 //       if (['hi', 'hello'].includes(message.body.toLowerCase())) {
 //         const menu = 'Welcome to IT Support!\nPlease select your issue type by replying with the corresponding number:\n1. 🖥️ Hardware Issue\n2. 🌐 Network Issue\n3. 🛠️ Software Issue';
@@ -358,16 +358,16 @@
 //       // Capture user's email
 //       else if (userState[user]?.step === 'get_email') {
 //         const email = message.body.trim();
-        
+
 //         // Validate email format
 //         if (!validateEmail(email)) {
 //           await client.sendMessage(user, 'Invalid email format. Please provide a valid email address.');
 //           return;
 //         }
-        
+
 //         userState[user].email = email;
 //         userState[user].step = 'confirm_details';
-        
+
 //         // Show summary and ask for confirmation
 //         const summary = generateSummary(userState[user]);
 //         await client.sendMessage(user, summary);
@@ -375,15 +375,15 @@
 //       // Handle confirmation or edit request
 //       else if (userState[user]?.step === 'confirm_details') {
 //         const response = message.body.toLowerCase().trim();
-        
+
 //         if (response === 'confirm') {
 //           // Proceed with ticket creation
 //           userState[user].step = 'creating_ticket';
 //           await client.sendMessage(user, '⏳ Creating your support ticket...');
-          
+
 //           try {
 //             const ticketId = await createOsTicket(userState[user]);
-            
+
 //             // Send confirmation message
 //             const confirmationMessage = `✅ Your support ticket has been created successfully!\n\n` +
 //               `📝 Ticket ID: ${ticketId}\n` +
@@ -391,10 +391,10 @@
 //               `👤 Name: ${userState[user].name}\n\n` +
 //               `Our support team will review your issue and get back to you shortly. ` +
 //               `Please reference your Ticket ID in any future communications about this issue.`;
-            
+
 //             await client.sendMessage(user, confirmationMessage);
 //             console.log(`Ticket created for ${userState[user].name}, ID: ${ticketId}`);
-            
+
 //             // Clear user state
 //             delete userState[user];
 //           } catch (error) {
@@ -402,7 +402,7 @@
 //             await client.sendMessage(user, 'There was an error creating your ticket. Please try again later or contact support directly.');
 //             userState[user].step = 'confirm_details';
 //           }
-//         } 
+//         }
 //         else if (response === 'edit') {
 //           // Ask which field to edit
 //           userState[user].step = 'select_edit_field';
@@ -422,7 +422,7 @@
 //       // Handle edit field selection
 //       else if (userState[user]?.step === 'select_edit_field') {
 //         const choice = message.body.trim();
-        
+
 //         switch (choice) {
 //           case '1':
 //             userState[user].step = 'edit_issue_type';
@@ -480,12 +480,12 @@
 //       // Handle editing email
 //       else if (userState[user]?.step === 'edit_email') {
 //         const email = message.body.trim();
-        
+
 //         if (!validateEmail(email)) {
 //           await client.sendMessage(user, 'Invalid email format. Please provide a valid email address.');
 //           return;
 //         }
-        
+
 //         userState[user].email = email;
 //         userState[user].step = 'confirm_details';
 //         const summary = generateSummary(userState[user]);
@@ -499,7 +499,7 @@
 //       console.error('Error handling message:', error);
 //     }
 //   });
-  
+
 //   // Function to generate a summary of ticket details for confirmation
 //   function generateSummary(details) {
 //     return `📋 *Ticket Summary*\n\n` +
@@ -511,12 +511,12 @@
 //       `• *confirm* - to create your support ticket\n` +
 //       `• *edit* - to modify any information`;
 //   }
-    
+
 //     // Function to create a ticket in osTicket
 //     async function createOsTicket(details) {
 //       const osTicketUrl = process.env.OSTICKET_URL;
 //       const apiKey = process.env.OSTICKET_API_KEY;
-      
+
 //       const ticketData = {
 //         name: details.name,
 //         email: details.email,
@@ -525,17 +525,17 @@
 //         ip: '0.0.0.0',
 //         topicId: 1
 //       };
-      
+
 //       const config = {
 //         headers: {
 //           'Content-Type': 'application/json',
 //           'X-API-Key': apiKey
 //         }
 //       };
-      
+
 //       try {
 //         const response = await axios.post(osTicketUrl, ticketData, config);
-        
+
 //         if (response.status === 201) {
 //             const ticketId = response.data;
 //             console.log(`Successfully created ticket with ID: ${ticketId}`);
@@ -552,18 +552,18 @@
 //         throw error;
 //       }
 //     }
-    
+
 //     // Function to validate email format
 //     function validateEmail(email) {
 //       const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 //       return re.test(email);
 //     }
-    
+
 //     console.log('Initializing WhatsApp client...');
 //     // Initialize the client
 //     await client.initialize();
 //     console.log('Initialization process completed');
-    
+
 //   } catch (error) {
 //     console.error('Fatal error encountered:', error);
 //     // Don't exit the process, keep the web server running
@@ -573,12 +573,12 @@
 // }
 
 // index.js - Main application entry point
-require('dotenv').config();
-const app = require('./app');
-const { initWhatsAppClient } = require('./whatsappClient');
-const { connectToDatabase } = require('./config/db');
-const { setupGracefulShutdown } = require('./utils/shutdown');
-const logger = require('./lib/logger');
+require("dotenv").config();
+const { app, setMissingEnvVars } = require("./app");
+const { initWhatsAppClient } = require("./whatsappClient");
+const { connectToDatabase } = require("./config/db");
+const { setupGracefulShutdown } = require("./utils/shutdown");
+const logger = require("./lib/logger");
 
 // Store the latest QR code (kept at top level for sharing across modules)
 global.latestQR = null;
@@ -588,48 +588,53 @@ global.qrTimestamp = null;
 const port = process.env.PORT || 8080;
 
 // Check for required environment variables
-const requiredEnvVars = ['MONGO_URL'];
-const missingEnvVars = requiredEnvVars.filter(varName => !process.env[varName]);
+const requiredEnvVars = ["MONGO_URL"];
+const missingEnvVars = requiredEnvVars.filter((varName) => !process.env[varName]);
+
+// Pass the missing env vars to the UI routes
+setMissingEnvVars(missingEnvVars);
 
 // Start the application
 async function startApp() {
   try {
-    logger.info('Starting application');
-    
+    logger.info("Starting application");
+
     // Log deployment information
-    const deploymentId = process.env.RAILWAY_DEPLOYMENT_ID || 'local';
-    const buildId = process.env.RAILWAY_BUILD_ID || 'development';
-    
-    logger.info('Deployment information:', {
+    const deploymentId = process.env.RAILWAY_DEPLOYMENT_ID || "local";
+    const buildId = process.env.RAILWAY_BUILD_ID || "development";
+
+    logger.info("Deployment information:", {
       deploymentId,
       buildId,
       startTime: new Date().toISOString(),
-      nodeEnv: process.env.NODE_ENV || 'development',
+      nodeEnv: process.env.NODE_ENV || "development",
     });
+
+    // Set up graceful shutdown handlers
+    setupGracefulShutdown();
 
     // Start the web server
     app.listen(port, () => {
       logger.info(`QR code server running at http://localhost:${port}`);
       logger.info(`When deployed on Railway, the URL will be available in your project dashboard`);
-      
+
       // Log environment variables status
       if (missingEnvVars.length > 0) {
-        logger.error('Missing required environment variables:', missingEnvVars.join(', '));
-        logger.error('The application will not fully function until these are provided.');
-        logger.error('Please check the web interface for more information.');
+        logger.error("Missing required environment variables:", missingEnvVars.join(", "));
+        logger.error("The application will not fully function until these are provided.");
+        logger.error("Please check the web interface for more information.");
       } else {
         // Only start WhatsApp client if all required environment variables are present
         connectToDatabase()
           .then(() => initWhatsAppClient())
-          .catch(err => logger.error('Failed to initialize application:', err));
+          .catch((err) => logger.error("Failed to initialize application:", err));
       }
     });
 
     // Set up graceful shutdown handlers
     setupGracefulShutdown();
-    
   } catch (error) {
-    logger.error('Error starting application:', error);
+    logger.error("Error starting application:", error);
     process.exit(1);
   }
 }
