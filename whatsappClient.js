@@ -1,6 +1,7 @@
 // whatsappClient.js - WhatsApp client initialization and event handling
 const { Client, RemoteAuth } = require('whatsapp-web.js');
-const { MongoStore } = require('wwebjs-mongo');
+// const { MongoStore } = require('wwebjs-mongo');
+const EnhancedMongoStore = require('./lib/customMongoStore');
 const mongoose = require('mongoose');
 const qrHandler = require('./handlers/qrHandler');
 const messageHandler = require('./handlers/messageHandler');
@@ -22,12 +23,16 @@ async function initWhatsAppClient() {
       logger.error('MongoDB not connected. Cannot initialize WhatsApp client.');
       return;
     }
+
+    // Verify MongoDB collections
+    await verifyMongoConnection();
     
-    // Initialize MongoStore with session name
-    const store = new MongoStore({
-      mongoose: mongoose,
-      session: 'whatsapp-support-bot' // Consistent session name
-    });
+     // Initialize enhanced MongoStore with session name and explicit collection
+     const store = new EnhancedMongoStore({
+        mongoose: mongoose,
+        collection: 'whatsapp-sessions',  // Explicitly define collection name
+        session: 'whatsapp-support-bot'   // Consistent session name
+      });
     
     // Extend store with logging
     sessionManager.enhanceStore(store);
@@ -102,6 +107,32 @@ async function initWhatsAppClient() {
     return null;
   }
 }
+
+// MongoDB verification function
+async function verifyMongoConnection() {
+    try {
+      logger.info('Verifying MongoDB collections...');
+      const collections = await mongoose.connection.db.listCollections().toArray();
+      logger.info(`Available collections: ${collections.map(c => c.name).join(', ')}`);
+      
+      // Check if our collection exists, if not create it
+      const collectionExists = collections.some(c => c.name === 'whatsapp-sessions');
+      if (!collectionExists) {
+        logger.info('Creating whatsapp-sessions collection');
+        await mongoose.connection.db.createCollection('whatsapp-sessions');
+        logger.info('Collection created successfully');
+      }
+      
+      // Verify the collection is accessible
+      const sessionsColl = mongoose.connection.db.collection('whatsapp-sessions');
+      logger.info('Session collection accessible:', !!sessionsColl);
+      
+      return true;
+    } catch (error) {
+      logger.error('Error verifying MongoDB:', error);
+      return false;
+    }
+  }
 
 // Register all event handlers for the WhatsApp client
 function registerEventHandlers(client) {
