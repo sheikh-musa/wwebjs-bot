@@ -447,6 +447,11 @@ async function initWhatsAppClient() {
     client.on("ready", () => {
       console.log("WhatsApp client ready!");
 
+      // Run a health check after 30 seconds to verify everything is working
+      setTimeout(async () => {
+        await checkWhatsAppHealth();
+      }, 30000);
+
       // Test if messaging works
       setTimeout(async () => {
         try {
@@ -473,9 +478,26 @@ async function initWhatsAppClient() {
         // Test if this basic message sending works
         if (message.body.toLowerCase() === "test") {
           console.log("Sending test response...");
-          await client.sendMessage(user, "Test response received");
-          console.log("Test response sent successfully");
-          return;
+          try {
+            await client.sendMessage(user, "Test response received");
+            console.log("Test response sent successfully");
+          } catch (error) {
+            console.error("Error sending test response:", error);
+
+            // Try to recover and retry
+            console.log("Attempting to recover and retry...");
+            await recoverWhatsAppClient();
+
+            // Retry sending after recovery
+            try {
+              if (client) {
+                await client.sendMessage(user, "Test response received (retry)");
+                console.log("Retry test response sent successfully");
+              }
+            } catch (retryError) {
+              console.error("Retry also failed:", retryError);
+            }
+          }
         }
 
         // Initialize user state if it doesn't exist
@@ -540,6 +562,76 @@ async function restartClient() {
     return true;
   } catch (error) {
     console.error("Error restarting client:", error);
+    return false;
+  }
+}
+
+async function checkWhatsAppHealth() {
+  try {
+    if (!client) {
+      console.log("Client not initialized, cannot check health");
+      return false;
+    }
+
+    // Try to access WhatsApp functionality
+    let isHealthy = false;
+
+    try {
+      // Check if we can get client info - this is less intensive than getChats()
+      const info = client.info;
+      isHealthy = !!info && !!info.wid;
+
+      if (isHealthy) {
+        console.log("WhatsApp health check passed: Client info available");
+      } else {
+        console.log("WhatsApp health check failed: Client info not available");
+      }
+    } catch (error) {
+      console.error("Error checking client info:", error);
+      isHealthy = false;
+    }
+
+    // If not healthy, trigger recovery
+    if (!isHealthy) {
+      console.log("WhatsApp client unhealthy, triggering recovery...");
+      await recoverWhatsAppClient();
+    }
+
+    return isHealthy;
+  } catch (error) {
+    console.error("Error in health check:", error);
+    return false;
+  }
+}
+
+// Add a recovery function
+async function recoverWhatsAppClient() {
+  try {
+    console.log("Starting WhatsApp client recovery...");
+
+    // If client exists, try to destroy it
+    if (client) {
+      try {
+        console.log("Destroying existing client...");
+        await client.destroy();
+        console.log("Client destroyed");
+      } catch (err) {
+        console.error("Error destroying client:", err);
+      }
+    }
+
+    // Wait a moment before restarting
+    console.log("Waiting before restart...");
+    await new Promise((resolve) => setTimeout(resolve, 5000));
+
+    // Reinitialize client
+    console.log("Reinitializing WhatsApp client...");
+    await initWhatsAppClient();
+    console.log("Recovery completed");
+
+    return true;
+  } catch (error) {
+    console.error("Error recovering client:", error);
     return false;
   }
 }
