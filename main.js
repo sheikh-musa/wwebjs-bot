@@ -573,74 +573,469 @@
 // }
 
 // index.js - Main application entry point
+// require("dotenv").config();
+// const { app, setMissingEnvVars } = require("./app");
+// const { initWhatsAppClient } = require("./whatsappClient");
+// const { connectToDatabase } = require("./config/db");
+// const { setupGracefulShutdown } = require("./utils/shutdown");
+// const logger = require("./lib/logger");
+
+// // Store the latest QR code (kept at top level for sharing across modules)
+// global.latestQR = null;
+// global.qrTimestamp = null;
+
+// // Get port from environment or default to 8080
+// const port = process.env.PORT || 8080;
+
+// // Check for required environment variables
+// const requiredEnvVars = ["MONGO_URL"];
+// const missingEnvVars = requiredEnvVars.filter((varName) => !process.env[varName]);
+
+// // Pass the missing env vars to the UI routes
+// setMissingEnvVars(missingEnvVars);
+
+// // Start the application
+// async function startApp() {
+//   try {
+//     logger.info("Starting application");
+
+//     // Log deployment information
+//     const deploymentId = process.env.RAILWAY_DEPLOYMENT_ID || "local";
+//     const buildId = process.env.RAILWAY_BUILD_ID || "development";
+
+//     logger.info("Deployment information:", {
+//       deploymentId,
+//       buildId,
+//       startTime: new Date().toISOString(),
+//       nodeEnv: process.env.NODE_ENV || "development",
+//     });
+
+//     // Set up graceful shutdown handlers
+//     setupGracefulShutdown();
+
+//     // Start the web server
+//     app.listen(port, () => {
+//       logger.info(`QR code server running at http://localhost:${port}`);
+//       logger.info(`When deployed on Railway, the URL will be available in your project dashboard`);
+
+//       // Log environment variables status
+//       if (missingEnvVars.length > 0) {
+//         logger.error("Missing required environment variables:", missingEnvVars.join(", "));
+//         logger.error("The application will not fully function until these are provided.");
+//         logger.error("Please check the web interface for more information.");
+//       } else {
+//         // Only start WhatsApp client if all required environment variables are present
+//         connectToDatabase()
+//           .then(() => initWhatsAppClient())
+//           .catch((err) => logger.error("Failed to initialize application:", err));
+//       }
+//     });
+
+//     // Set up graceful shutdown handlers
+//     setupGracefulShutdown();
+//   } catch (error) {
+//     logger.error("Error starting application:", error);
+//     process.exit(1);
+//   }
+// }
+
+// // Start the application
+// startApp();
+
+// // Export for testing purposes if needed
+// module.exports = { missingEnvVars };
+
+const { Client, RemoteAuth } = require("whatsapp-web.js");
+const { MongoStore } = require("wwebjs-mongo");
+const mongoose = require("mongoose");
+const qrcode = require("qrcode");
+const express = require("express");
+const axios = require("axios");
 require("dotenv").config();
-const { app, setMissingEnvVars } = require("./app");
-const { initWhatsAppClient } = require("./whatsappClient");
-const { connectToDatabase } = require("./config/db");
-const { setupGracefulShutdown } = require("./utils/shutdown");
-const logger = require("./lib/logger");
 
-// Store the latest QR code (kept at top level for sharing across modules)
-global.latestQR = null;
-global.qrTimestamp = null;
-
-// Get port from environment or default to 8080
+// Create Express app for QR code display
+const app = express();
 const port = process.env.PORT || 8080;
 
+// Store the latest QR code
+let latestQR = null;
+let qrTimestamp = null;
+
 // Check for required environment variables
-const requiredEnvVars = ["MONGO_URL"];
-const missingEnvVars = requiredEnvVars.filter((varName) => !process.env[varName]);
+let missingEnvVars = [];
+if (!process.env.MONGO_URL) missingEnvVars.push("MONGO_URL");
 
-// Pass the missing env vars to the UI routes
-setMissingEnvVars(missingEnvVars);
+// Set up simple web server for QR code display
+app.get("/", (req, res) => {
+  // If there are missing environment variables, show error
+  if (missingEnvVars.length > 0) {
+    return res.send(`
+      <!DOCTYPE html>
+      <html lang="en">
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Configuration Error</title>
+        <style>
+          body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #f5f5f5;
+          }
+          .container {
+            text-align: center;
+            background-color: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            max-width: 600px;
+          }
+          .error {
+            color: red;
+            background-color: #ffeeee;
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+          }
+          code {
+            background-color: #f0f0f0;
+            padding: 2px 5px;
+            border-radius: 3px;
+            font-family: monospace;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <h1>Configuration Error</h1>
+          <div class="error">
+            <p>The following environment variables are missing:</p>
+            <ul style="text-align: left;">
+              ${missingEnvVars.map((v) => `<li><code>${v}</code></li>`).join("")}
+            </ul>
+          </div>
+          <h2>How to Fix This</h2>
+          <p>Make sure to set the required environment variables in your Railway project:</p>
+          <ol style="text-align: left;">
+            <li>Go to your Railway dashboard</li>
+            <li>Select your project</li>
+            <li>Click on the "Variables" tab</li>
+            <li>Add or update the missing environment variables</li>
+            <li>Redeploy your application</li>
+          </ol>
+          <p>For MongoDB, make sure you're using the connection string from Railway's MongoDB service.</p>
+        </div>
+      </body>
+      </html>
+    `);
+  }
 
-// Start the application
-async function startApp() {
+  // Regular QR code display logic
+  if (latestQR) {
+    const minutesAgo = qrTimestamp ? Math.floor((Date.now() - qrTimestamp) / 60000) : 0;
+    res.send(`
+      <!DOCTYPE html>
+      <html lang="en">
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>WhatsApp QR Code</title>
+        <style>
+          body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #f5f5f5;
+          }
+          .container {
+            text-align: center;
+            background-color: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+          }
+          img {
+            max-width: 300px;
+            margin: 20px 0;
+          }
+          .timestamp {
+            color: #666;
+            font-size: 0.8rem;
+            margin-top: 10px;
+          }
+          .warning {
+            color: ${minutesAgo > 2 ? "red" : "#666"};
+            margin-top: 10px;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <h1>WhatsApp QR Code</h1>
+          <p>Scan this QR code with WhatsApp to authenticate your bot</p>
+          <img src="${latestQR}" alt="WhatsApp QR Code">
+          <p class="timestamp">Generated ${minutesAgo} minutes ago</p>
+          ${minutesAgo > 2 ? '<p class="warning">Warning: This QR code may have expired. Refresh the page to check for a new one.</p>' : ""}
+          <p><button onclick="window.location.reload()">Refresh</button></p>
+        </div>
+      </body>
+      </html>
+    `);
+  } else {
+    res.send(`
+      <!DOCTYPE html>
+      <html lang="en">
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Waiting for QR Code</title>
+        <style>
+          body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #f5f5f5;
+          }
+          .container {
+            text-align: center;
+            background-color: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+          }
+          .loader {
+            border: 8px solid #f3f3f3;
+            border-radius: 50%;
+            border-top: 8px solid #3498db;
+            width: 60px;
+            height: 60px;
+            margin: 20px auto;
+            animation: spin 2s linear infinite;
+          }
+          @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+          }
+        </style>
+        <script>
+          // Auto refresh every 5 seconds
+          setTimeout(() => window.location.reload(), 5000);
+        </script>
+      </head>
+      <body>
+        <div class="container">
+          <h1>Waiting for QR Code</h1>
+          <p>The QR code has not been generated yet. Please wait...</p>
+          <div class="loader"></div>
+          <p>This page will automatically refresh</p>
+        </div>
+      </body>
+      </html>
+    `);
+  }
+});
+
+// Add a simple session cleanup endpoint
+app.get("/cleanup-session", async (req, res) => {
   try {
-    logger.info("Starting application");
+    console.log("Cleaning up session data...");
 
-    // Log deployment information
-    const deploymentId = process.env.RAILWAY_DEPLOYMENT_ID || "local";
-    const buildId = process.env.RAILWAY_BUILD_ID || "development";
+    // Drop the collections if they exist
+    if (mongoose.connection.readyState === 1) {
+      try {
+        await mongoose.connection.db.collection("whatsapp-sessions").drop();
+        console.log("Dropped whatsapp-sessions collection");
+      } catch (err) {
+        console.log("No whatsapp-sessions collection to drop");
+      }
 
-    logger.info("Deployment information:", {
-      deploymentId,
-      buildId,
-      startTime: new Date().toISOString(),
-      nodeEnv: process.env.NODE_ENV || "development",
+      try {
+        await mongoose.connection.db.collection("whatsapp-RemoteAuth-whatsapp-support-bot.files").drop();
+        console.log("Dropped RemoteAuth files collection");
+      } catch (err) {
+        console.log("No RemoteAuth files collection to drop");
+      }
+
+      try {
+        await mongoose.connection.db.collection("whatsapp-RemoteAuth-whatsapp-support-bot.chunks").drop();
+        console.log("Dropped RemoteAuth chunks collection");
+      } catch (err) {
+        console.log("No RemoteAuth chunks collection to drop");
+      }
+    }
+
+    // Reset QR code
+    latestQR = null;
+
+    res.send('Session data cleaned. <a href="/">Go back</a> and refresh to get a new QR code.');
+  } catch (error) {
+    console.error("Error cleaning up session:", error);
+    res.status(500).send("Error cleaning up session: " + error.message);
+  }
+});
+
+// User state to track conversation flow
+const userState = {};
+
+// Start the web server
+app.listen(port, () => {
+  console.log(`QR code server running at http://localhost:${port}`);
+  console.log(`When deployed on Railway, the URL will be available in your project dashboard`);
+
+  // Log environment variables status
+  if (missingEnvVars.length > 0) {
+    console.error("ERROR: Missing required environment variables:", missingEnvVars.join(", "));
+    console.error("The application will not fully function until these are provided.");
+    console.error("Please check the web interface for more information.");
+  } else {
+    // Only start WhatsApp client if all required environment variables are present
+    initWhatsAppClient();
+  }
+});
+
+// Function to initialize WhatsApp client
+async function initWhatsAppClient() {
+  try {
+    // Get MongoDB URL
+    const mongoUrl = process.env.MONGO_URL;
+
+    // Log a safe version of the MongoDB URL for debugging
+    const redactedUrl = mongoUrl ? mongoUrl.replace(/:([^@/]+)@/, ":****@") : "undefined";
+    console.log("Using MongoDB URL:", redactedUrl);
+
+    // Additional mongoose connection options
+    const mongooseOptions = {
+      serverSelectionTimeoutMS: 15000, // Timeout after 15 seconds
+      socketTimeoutMS: 45000, // Close sockets after 45 seconds of inactivity
+    };
+
+    // Connect to MongoDB and wait for connection to be established
+    console.log("Connecting to MongoDB...");
+    await mongoose.connect(mongoUrl, mongooseOptions);
+    console.log("Successfully connected to MongoDB");
+
+    // Initialize MongoStore with session name
+    const store = new MongoStore({
+      mongoose: mongoose,
+      collection: "whatsapp-sessions", // Explicitly set collection name
+      session: "whatsapp-support-bot", // Consistent session name
     });
 
-    // Set up graceful shutdown handlers
-    setupGracefulShutdown();
+    console.log("Initializing WhatsApp client...");
 
-    // Start the web server
-    app.listen(port, () => {
-      logger.info(`QR code server running at http://localhost:${port}`);
-      logger.info(`When deployed on Railway, the URL will be available in your project dashboard`);
+    // Initialize WhatsApp client optimized for Railway environment
+    const client = new Client({
+      authStrategy: new RemoteAuth({
+        store: store,
+        backupSyncIntervalMs: 300000, // Sync session every 5 minutes
+        clientId: "whatsapp-support-bot", // Consistent client ID
+      }),
+      puppeteer: {
+        // Railway-optimized Puppeteer settings
+        headless: true,
+        args: [
+          "--no-sandbox",
+          "--disable-setuid-sandbox",
+          "--disable-dev-shm-usage",
+          "--disable-accelerated-2d-canvas",
+          "--no-first-run",
+          "--no-zygote",
+          "--single-process",
+          "--disable-gpu",
+        ],
+      },
+    });
 
-      // Log environment variables status
-      if (missingEnvVars.length > 0) {
-        logger.error("Missing required environment variables:", missingEnvVars.join(", "));
-        logger.error("The application will not fully function until these are provided.");
-        logger.error("Please check the web interface for more information.");
-      } else {
-        // Only start WhatsApp client if all required environment variables are present
-        connectToDatabase()
-          .then(() => initWhatsAppClient())
-          .catch((err) => logger.error("Failed to initialize application:", err));
+    // QR Code Handler - Generate QR code and make it available on the web server
+    client.on("qr", async (qr) => {
+      console.log("New QR code received");
+
+      // Update timestamp
+      qrTimestamp = Date.now();
+
+      // Generate QR code as data URL
+      try {
+        latestQR = await qrcode.toDataURL(qr);
+        console.log("QR code generated and available at http://localhost:" + port);
+      } catch (err) {
+        console.error("Error generating QR code:", err);
       }
     });
 
-    // Set up graceful shutdown handlers
-    setupGracefulShutdown();
+    // Authentication Success Handler - Remove QR code when authenticated
+    client.on("authenticated", () => {
+      console.log("Authenticated successfully!");
+      latestQR = null; // Clear QR code since it's no longer needed
+    });
+
+    // Authentication Failed Handler
+    client.on("auth_failure", (error) => {
+      console.error("Authentication failed:", error);
+    });
+
+    // Disconnected Handler
+    client.on("disconnected", (reason) => {
+      console.log("Client disconnected:", reason);
+      // Clear QR code when disconnected, so a new one can be generated
+      latestQR = null;
+    });
+
+    // Ready Handler
+    client.on("ready", () => {
+      console.log("WhatsApp client ready!");
+    });
+
+    // Handle incoming messages
+    client.on("message", async (message) => {
+      try {
+        const user = message.from;
+        console.log(`Received message from ${user}: "${message.body}"`);
+
+        // Initialize user state if it doesn't exist
+        if (!userState[user] && ["hi", "hello"].includes(message.body.toLowerCase())) {
+          userState[user] = { step: "initial" };
+        }
+
+        // Greet user and present issue options
+        if (["hi", "hello"].includes(message.body.toLowerCase())) {
+          const menu =
+            "Welcome to IT Support!\nPlease select your issue type by replying with the corresponding number:\n1. 🖥️ Hardware Issue\n2. 🌐 Network Issue\n3. 🛠️ Software Issue";
+          await client.sendMessage(user, menu);
+          userState[user] = { step: "select_issue" };
+        }
+        // Add the rest of your message handling logic here
+      } catch (error) {
+        console.error("Error handling message:", error);
+      }
+    });
+
+    // Handle uncaught exceptions to prevent app crash
+    process.on("uncaughtException", (error) => {
+      console.error("Uncaught exception:", error);
+      // Don't crash the server
+    });
+
+    console.log("Initializing WhatsApp client...");
+    // Initialize the client
+    await client.initialize();
+    console.log("Initialization process completed");
   } catch (error) {
-    logger.error("Error starting application:", error);
-    process.exit(1);
+    console.error("Fatal error encountered:", error);
+    // Don't exit the process, keep the web server running
+    console.error("WhatsApp client initialization failed, but web server is still running.");
+    console.error("Check the configuration and restart the application.");
   }
 }
-
-// Start the application
-startApp();
-
-// Export for testing purposes if needed
-module.exports = { missingEnvVars };
