@@ -357,6 +357,22 @@ async function initWhatsAppClient() {
     // Ready Handler
     client.on("ready", () => {
       console.log("WhatsApp client ready!");
+
+      // Test if messaging works
+      setTimeout(async () => {
+        try {
+          const chats = await client.getChats();
+          console.log(`Number of chats available: ${chats.length}`);
+
+          // Log info about WhatsApp connection
+          console.log(`WhatsApp connection info: ${client.info ? "Available" : "Not available"}`);
+          if (client.info) {
+            console.log(`Connected as: ${client.info.wid.user}`);
+          }
+        } catch (error) {
+          console.error("Error checking client status:", error);
+        }
+      }, 5000);
     });
 
     // Handle incoming messages
@@ -364,6 +380,14 @@ async function initWhatsAppClient() {
       try {
         const user = message.from;
         console.log(`Received message from ${user}: "${message.body}"`);
+
+        // Test if this basic message sending works
+        if (message.body.toLowerCase() === "test") {
+          console.log("Sending test response...");
+          await client.sendMessage(user, "Test response received");
+          console.log("Test response sent successfully");
+          return;
+        }
 
         // Initialize user state if it doesn't exist
         if (!userState[user] && ["hi", "hello"].includes(message.body.toLowerCase())) {
