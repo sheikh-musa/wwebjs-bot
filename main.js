@@ -269,13 +269,38 @@ app.get("/cleanup-session", async (req, res) => {
 
 app.get("/debug", (req, res) => {
   try {
+    // More defensive checks for client status
     const clientStatus = {
       exists: client !== null,
-      initialized: client ? typeof client.initialize === "function" : false,
-      authenticated: client && client.authStrategy ? client.authStrategy.isAuthenticated() : false,
+      initialized: client ? !!client.info : false,
+      authenticated: false, // We'll set this below if possible
       qrCode: latestQR ? "Available" : "Not available",
       qrTimestamp: qrTimestamp ? new Date(qrTimestamp).toISOString() : "Never",
     };
+
+    // Safely check authentication status
+    if (client && client.authStrategy) {
+      try {
+        // Try different methods to check authentication
+        if (typeof client.authStrategy.isAuthenticated === "function") {
+          clientStatus.authenticated = client.authStrategy.isAuthenticated();
+        } else if (client.info) {
+          // If client.info exists, we're likely authenticated
+          clientStatus.authenticated = true;
+        }
+      } catch (authErr) {
+        console.error("Error checking authentication:", authErr);
+        clientStatus.authError = authErr.message;
+      }
+    }
+
+    // Add more client details if available
+    if (client && client.info) {
+      clientStatus.info = {
+        wid: client.info.wid ? client.info.wid.user : "unknown",
+        platform: client.info.platform || "unknown",
+      };
+    }
 
     res.json({
       client: clientStatus,
