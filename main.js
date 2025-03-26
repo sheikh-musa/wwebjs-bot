@@ -248,6 +248,57 @@ app.get("/cleanup-session", async (req, res) => {
   }
 });
 
+// Add this endpoint to your Express app
+app.get("/debug", async (req, res) => {
+  try {
+    let status = {
+      client: "unknown",
+      authenticated: false,
+      info: null,
+      error: null,
+    };
+
+    if (!client) {
+      status.client = "not initialized";
+    } else {
+      status.client = "initialized";
+
+      try {
+        status.authenticated = client.authStrategy.isAuthenticated();
+      } catch (err) {
+        status.error = "Error checking authentication: " + err.message;
+      }
+
+      if (client.info) {
+        status.info = {
+          platform: client.info.platform,
+          connected: !!client.info.wid,
+        };
+      }
+    }
+
+    // Send response
+    res.json({
+      status,
+      time: new Date().toISOString(),
+      memory: process.memoryUsage(),
+      uptime: process.uptime(),
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Add a restart endpoint
+app.get("/restart-client", async (req, res) => {
+  try {
+    const result = await restartClient();
+    res.send(result ? "Client restarted successfully" : "Failed to restart client");
+  } catch (error) {
+    res.status(500).send("Error: " + error.message);
+  }
+});
+
 // User state to track conversation flow
 const userState = {};
 
@@ -301,11 +352,10 @@ async function initWhatsAppClient() {
     const client = new Client({
       authStrategy: new RemoteAuth({
         store: store,
-        backupSyncIntervalMs: 300000, // Sync session every 5 minutes
-        clientId: "whatsapp-support-bot", // Consistent client ID
+        backupSyncIntervalMs: 300000,
+        clientId: "whatsapp-support-bot",
       }),
       puppeteer: {
-        // Railway-optimized Puppeteer settings
         headless: true,
         args: [
           "--no-sandbox",
@@ -317,7 +367,18 @@ async function initWhatsAppClient() {
           "--single-process",
           "--disable-gpu",
         ],
+        // Add timeout to avoid hanging
+        timeout: 60000,
       },
+      // Add these options
+      webVersion: "2.2329.9", // Specify a known working version
+      webVersionCache: {
+        type: "none", // Disable web version caching to prevent issues
+      },
+      // Improved message handling
+      qrMaxRetries: 3,
+      takeoverOnConflict: false, // Disable takeover to prevent multi-device issues
+      userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
     });
 
     // QR Code Handler - Generate QR code and make it available on the web server
@@ -422,5 +483,33 @@ async function initWhatsAppClient() {
     // Don't exit the process, keep the web server running
     console.error("WhatsApp client initialization failed, but web server is still running.");
     console.error("Check the configuration and restart the application.");
+  }
+}
+
+// Add this function to your code
+async function restartClient() {
+  try {
+    console.log("Attempting to restart WhatsApp client...");
+
+    // If there's an existing client, try to close it properly
+    if (client && client.pupPage) {
+      console.log("Destroying existing client...");
+      await client.destroy();
+      console.log("Existing client destroyed");
+    }
+
+    // Wait a moment before restarting
+    console.log("Waiting before restart...");
+    await new Promise((resolve) => setTimeout(resolve, 5000));
+
+    // Initialize the client again
+    console.log("Re-initializing client...");
+    await client.initialize();
+    console.log("Client re-initialized");
+
+    return true;
+  } catch (error) {
+    console.error("Error restarting client:", error);
+    return false;
   }
 }
